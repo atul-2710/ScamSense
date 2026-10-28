@@ -1,9 +1,11 @@
-
-import re
+# app.py
 from pathlib import Path
-
+import warnings
 import joblib
+from sklearn.exceptions import InconsistentVersionWarning
 import streamlit as st
+
+from src.rules import find_warning_signals
 
 # --------------------------------------------------
 # ScamSense: AI-powered SMS spam detection assistant
@@ -15,76 +17,46 @@ st.set_page_config(
     layout="centered",
 )
 
-MODEL_PATH = (
-    Path(__file__).parent
-    / "models"
-    / "scamsense_linear_svm.joblib"
-)
+MODEL_PATH = Path(__file__).parent / "models" / "scamsense_linear_svm.joblib"
 
 st.title("🛡️ ScamSense")
 st.subheader("AI-Powered SMS Spam Detection & Digital Safety")
 
 st.write(
-    "Analyze a text message for spam-like patterns and get "
-    "practical safety guidance."
+    "Analyze a text message for spam-like patterns and get practical safety guidance."
 )
 
 st.info(
-    "ScamSense provides an ML-based spam classification, not a "
-    "guaranteed scam verdict or proof that a message is safe."
+    "ScamSense provides an ML-based spam classification, not a guaranteed "
+    "scam verdict or proof that a message is safe."
 )
+
 
 @st.cache_resource
 def load_model():
+    """Loads the serialized scikit-learn TF-IDF + Linear SVM pipeline."""
     if not MODEL_PATH.exists():
         raise FileNotFoundError(
-            f"Model not found at {MODEL_PATH}. "
-            "Place scamsense_linear_svm.joblib in the models folder."
+            "The model file is missing from the models directory."
         )
-    return joblib.load(MODEL_PATH)
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
+            return joblib.load(MODEL_PATH)
+    except Exception as err:
+        raise RuntimeError(f"Error deserializing model file: {err}") from err
 
 
-# These are warning indicators, not a second ML model.
-WARNING_PATTERNS = {
-    "Suspicious link": (
-        r"https?://|www\.|bit\.ly|tinyurl\.com|"
-        r"\b[\w-]+\.(?:com|net|org|info|xyz)\b"
-    ),
-    "Urgency or pressure": (
-        r"\b(?:urgent|immediately|act now|"
-        r"expires today|limited time|final warning)\b"
-    ),
-    "Prize or reward language": (
-        r"\b(?:you(?:'| a)?ve won|winner|"
-        r"claim your prize|free entry|lottery)\b"
-    ),
-    "Sensitive information request": (
-        r"\b(?:password|otp|one.time password|"
-        r"pin number|cvv|bank details)\b"
-    ),
-    "Payment-related language": (
-        r"\b(?:pay now|send money|processing fee|"
-        r"payment required|account suspended)\b"
-    ),
-}
-
-
-def find_warning_signals(message):
-    signals = []
-
-    for name, pattern in WARNING_PATTERNS.items():
-        if re.search(pattern, message, flags=re.IGNORECASE):
-            signals.append(name)
-
-    return signals
-
-
+model = None
 try:
     model = load_model()
 except Exception as exc:
-    st.error(f"Unable to load the trained model: {exc}")
-    st.stop()
-
+    st.error(
+        "⚠️ System Alert: The AI classification model could not be initialized. "
+        "Rule-based indicator scanning remains functional."
+    )
+    with st.expander("Technical Diagnostic"):
+        st.write(str(exc))
 
 message = st.text_area(
     "Paste the SMS you want to analyze",
@@ -107,68 +79,70 @@ if analyze:
 
     if not cleaned_message:
         st.warning("Please enter a message first.")
-
     else:
-        # The exported pipeline includes TF-IDF and the classifier.
-        prediction = model.predict([cleaned_message])[0]
         signals = find_warning_signals(cleaned_message)
+        prediction = None
+
+        if model is not None:
+            try:
+                prediction = model.predict([cleaned_message])[0]
+            except Exception as pred_err:
+                st.error("An error occurred during machine learning inference.")
+                with st.expander("Inference Diagnostic"):
+                    st.write(str(pred_err))
 
         st.divider()
         st.subheader("Analysis results")
 
+        # 1. Model Output Display
         if prediction == "spam":
             st.error("Model classification: SPAM-LIKE")
             st.write(
                 "The model classified this message as spam. "
-                "Treat unexpected links, offers, and requests "
-                "for information with caution."
+                "Treat unexpected links, offers, and requests for information with caution."
             )
-        else:
+        elif prediction == "ham":
             st.success("Model classification: LIKELY LEGITIMATE")
             st.write(
                 "The model classified this message as legitimate. "
                 "This does not guarantee that it is safe."
             )
+        else:
+            st.info("Model classification: UNAVAILABLE")
 
+        # 2. Separate Rule-based Warning Indicators
         st.markdown("### Warning indicators")
-
         if signals:
             for signal in signals:
                 st.warning(signal)
         else:
             st.write(
-                "No indicators from the current rule list were "
-                "detected. This does not mean the message is safe."
+                "No indicators from the current rule list were detected. "
+                "This does not mean the message is safe."
             )
 
+        # 3. Defensive Safety Guidance
         st.markdown("### Recommended safety steps")
-
         if signals or prediction == "spam":
             st.markdown(
                 "- Avoid clicking unexpected links.\n"
-                "- Never share an OTP, password, PIN, or CVV "
-                "in response to an unsolicited message.\n"
-                "- Verify claims using the organization's "
-                "official app, website, or independently "
-                "verified phone number.\n"
+                "- Never share an OTP, password, PIN, or CVV in response to an unsolicited message.\n"
+                "- Verify claims using the organization's official app, website, or independently verified phone number.\n"
                 "- Do not pay unexpected fees to claim a prize."
             )
         else:
             st.markdown(
                 "- Check the sender if the message is unexpected.\n"
-                "- Verify important requests through a trusted "
-                "channel.\n"
-                "- Be cautious before opening links or sharing "
-                "personal information."
+                "- Verify important requests through a trusted channel.\n"
+                "- Be cautious before opening links or sharing personal information."
             )
 
         with st.expander("How to interpret this result"):
             st.write(
-                "The classification is generated by a Linear SVM "
-                "trained on the SMS Spam Collection dataset. "
-                "The warning indicators are separate, rule-based "
-                "checks. Neither method can identify every scam, "
-                "and the warning list is not exhaustive."
+                "The classification is generated by a Linear SVM trained on the SMS "
+                "Spam Collection dataset. The warning indicators are separate, "
+                "rule-based checks. Neither method can identify every scam, and the "
+                "warning list is not exhaustive."
             )
 
 st.caption(

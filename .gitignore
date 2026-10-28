@@ -1,31 +1,35 @@
-
-# Python
+# Byte-compiled / optimized / Python caches
 __pycache__/
 *.py[cod]
+*$py.class
+*.pytest_cache/
+
+# Virtual Environments
 .venv/
 venv/
+ENV/
+env/
+
+# Environment variables & secrets
 .env
+*.env
+.streamlit/secrets.toml
+*.key
 
-# Jupyter
-.ipynb_checkpoints/
-
-# Local datasets
-data/raw/*
-!data/raw/README.md
-
-# Trained model artifacts
+# Model artifacts (Must remain out of Git)
 models/*.joblib
 models/*.pkl
 
-# Secrets and credentials
-*.key
-secrets.json
+# Datasets
+data/raw/*
+!data/raw/README.md
 
-# OS/editor files
+# Jupyter & Colab
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# IDE and OS files
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
-.vscode/
-
-# Temporary files
-*.log
-.streamlit/secrets.toml
