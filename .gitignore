@@ -1,0 +1,31 @@
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local datasets
+data/raw/*
+!data/raw/README.md
+
+# Trained model artifacts
+models/*.joblib
+models/*.pkl
+
+# Secrets and credentials
+*.key
+secrets.json
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Temporary files
+*.log
+.streamlit/secrets.toml
